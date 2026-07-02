@@ -21,6 +21,9 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "tmp117.h"
+#include "sht45.h"
+#include "mlx.h"
 
 /* USER CODE END Includes */
 
@@ -49,7 +52,9 @@ SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart2;
 
 /* USER CODE BEGIN PV */
-
+float current_temperature = 0.0f; 	// for TMP117
+float temp = 0.0f; 					// for SHT45
+float hum = 0.0f; 				// for SHT45
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -82,7 +87,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
+	HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -103,6 +108,15 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+//while(1){
+  //if (TMP117_Init(&hi2c1) != TMP117_OK)
+  //{
+  //    // Error Handling: Sensor not found or communication failed
+  //    //Error_Handler();
+  //}
+  //HAL_Delay(100);
+//}
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -112,6 +126,17 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+
+	  //if (TMP117_Read_Temperature(&hi2c1, &current_temperature) == TMP117_OK)
+	  //{
+	  //    // successfully read into current_temperature
+	  //}
+
+
+	//SHT45_Read_Data(&hi2c1, &temp, &hum );
+	MLX90632_Ping(&hi2c1 );
+	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13);
+	HAL_Delay(1000);
   }
   /* USER CODE END 3 */
 }
