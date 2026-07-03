@@ -55,6 +55,12 @@ UART_HandleTypeDef huart2;
 float current_temperature = 0.0f; 	// for TMP117
 float temp = 0.0f; 					// for SHT45
 float hum = 0.0f; 				// for SHT45
+float hum_arr[100][2] = {{0}, {0}};
+uint16_t hum_arr_head = 0;
+float mov_av_h = 0;
+float mov_av_t = 0;
+
+float leaf_temperature_celsius = 0.0f;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,14 +114,11 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
-//while(1){
-  //if (TMP117_Init(&hi2c1) != TMP117_OK)
-  //{
-  //    // Error Handling: Sensor not found or communication failed
-  //    //Error_Handler();
-  //}
-  //HAL_Delay(100);
-//}
+  if (MLX_Application_Init() != 0)
+    {
+        Error_Handler();
+    }
+    HAL_Delay(100);
 
   /* USER CODE END 2 */
 
@@ -132,11 +135,39 @@ int main(void)
 	  //    // successfully read into current_temperature
 	  //}
 
+/*
+	SHT45_Read_Data(&hi2c1, &temp, &hum );
+	hum_arr[hum_arr_head][0] = hum;
+	hum_arr[hum_arr_head][1] = temp;
+	if (hum_arr_head == 99){
+		float dummy_h = 0;
+		float dummy_t = 0;
+		for (int i = 0; i < 100; i++){
+			dummy_h += hum_arr[i][0];
+			dummy_t += hum_arr[i][1];
+		}
+		dummy_h = dummy_h / 100;
+		dummy_t = dummy_t / 100;
+		mov_av_h = dummy_h;
+		mov_av_t = dummy_t;
+	}
 
-	//SHT45_Read_Data(&hi2c1, &temp, &hum );
-	MLX90632_Ping(&hi2c1 );
-	HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_13);
-	HAL_Delay(1000);
+	hum_arr_head ++;
+	hum_arr_head = hum_arr_head % 100;
+*/
+
+	int32_t mlx_status = MLX_Application_Read_Temperature(&leaf_temperature_celsius);
+		if (mlx_status == 0)
+		{
+			// A fresh, valid object temperature reading is ready in leaf_temperature_celsius!
+			// You can place a breakpoint or a watch expression here to inspect the value.
+		}
+		else if (mlx_status < 0)
+		{
+			// Optional: Handle I2C bus error states here
+		}
+
+	HAL_Delay(5);
   }
   /* USER CODE END 3 */
 }

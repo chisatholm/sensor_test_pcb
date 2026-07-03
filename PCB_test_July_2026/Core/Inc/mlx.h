@@ -8,12 +8,13 @@
 /**
  ******************************************************************************
  * @file           : mlx90632.h
- * @brief          : Header for mlx90632 connection test
+ * @brief          : Header for MLX90632SLD-DCB-000-SP connection test
  ******************************************************************************
  */
 
-#ifndef __MLX90632_H
-#define __MLX90632_H
+
+#ifndef __MLX_H
+#define __MLX_H
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,29 +23,27 @@ extern "C" {
 /* Includes ------------------------------------------------------------------*/
 #include "stm32l4xx_hal.h"
 
-/* Exported Constants --------------------------------------------------------*/
-#define MLX90632_I2C_ADDR_7BIT    0x3A
-#define MLX90632_I2C_ADDRESS      (MLX90632_I2C_ADDR_7BIT << 1)
-
-/* 16-bit Register Addresses */
-#define MLX90632_REG_EE_VERSION   0x2405
-
-typedef enum {
-    MLX90632_OK    = 0x00,
-    MLX90632_ERROR = 0x01
-} MLX90632_Status_t;
-
 /* Exported Functions Prototypes ---------------------------------------------*/
 
 /**
-  * @brief  Pings the MLX90632 to see if it responds with an ACK.
-  * @param  hi2c: Pointer to an I2C_HandleTypeDef structure.
-  * @retval MLX90632 Status
+  * @brief  Initializes the MLX90632 sensor by checking its connection,
+  * reading calibration parameters, and starting the state machine.
+  * @retval 0 on success, negative error code on failure.
   */
-MLX90632_Status_t MLX90632_Ping(I2C_HandleTypeDef *hi2c);
+int32_t MLX_Application_Init(void);
+
+/**
+  * @brief  Polls the MLX90632 for a new data frame, extracts raw data,
+  * and calculates both sensor and object temperatures.
+  * @param  p_leaf_temp: Pointer to a float where the calculated object (leaf)
+  * temperature in Celsius will be stored.
+  * @retval 0 if a new temperature was calculated successfully,
+  * 1 if no new data is available yet, negative on error.
+  */
+int32_t MLX_Application_Read_Temperature(float *p_leaf_temp);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* __MLX90632_H */
+#endif /* __MLX_H */
