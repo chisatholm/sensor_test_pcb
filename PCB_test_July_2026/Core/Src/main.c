@@ -24,6 +24,8 @@
 #include "tmp117.h"
 #include "sht45.h"
 #include "mlx.h"
+#include "bmp585_hardware.h"
+
 
 /* USER CODE END Includes */
 
@@ -61,6 +63,10 @@ float mov_av_h = 0;
 float mov_av_t = 0;
 
 float leaf_temperature_celsius = 0.0f;
+
+float bmp_temperature_c = 0.0f;
+float bmp_pressure_hpa = 0.0f;
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -122,6 +128,16 @@ int main(void)
 
   /* USER CODE END 2 */
 
+  if (BMP585_Hardware_Init() == BMP5_OK)
+	  {
+		  // Initialization succeeded! The sensor is now configuring and sampling in NORMAL mode.
+	  }
+	  else
+	  {
+		  // Initialization failed. Execution will lock here so you can catch it with a debugger.
+		  while(1);
+	  }
+
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -156,6 +172,8 @@ int main(void)
 	hum_arr_head = hum_arr_head % 100;
 */
 
+
+	  /*
 	int32_t mlx_status = MLX_Application_Read_Temperature(&leaf_temperature_celsius);
 		if (mlx_status == 0)
 		{
@@ -168,6 +186,12 @@ int main(void)
 		}
 
 	HAL_Delay(5);
+*/
+
+	int8_t rslt;
+	rslt = BMP585_Get_Data(&bmp_temperature_c, &bmp_pressure_hpa);
+	HAL_Delay(250);
+
   }
   /* USER CODE END 3 */
 }
