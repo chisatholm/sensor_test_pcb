@@ -145,7 +145,8 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
- // inconsequential change to test ability to commit
+	  // inconsequential change to test ability to commit
+	  // and another
 	  //if (TMP117_Read_Temperature(&hi2c1, &current_temperature) == TMP117_OK)
 	  //{
 	  //    // successfully read into current_temperature
