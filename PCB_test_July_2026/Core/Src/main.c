@@ -80,6 +80,10 @@ HAL_StatusTypeDef spi_err;
 volatile uint32_t raw_pressure = 0;
 volatile int32_t  raw_temperature = 0;
 
+volatile float BMP585_temp = 0;
+volatile float BMP585_pressure = 0;
+
+
 uint8_t tx_data[8] = {0}; // 1 Address byte + 1 Dummy byte + 6 Data bytes
 uint8_t rx_data[8] = {0};
 
@@ -218,7 +222,7 @@ uint8_t dummy_byte = 0x00;
       // 1. Enable Pressure & Temperature Channels (ODR_CONFIG register 0x37)
       // We'll set ODR to 10Hz (0x03) and keep PWR_MODE in standby for now
       tx_cfg[0] = 0x37 & 0x7F; // Write mode
-      tx_cfg[1] = 0x03;
+      tx_cfg[1] = 0x03; // 0x0 stndby, 0x1 normal, 0x2 forced, 0x3 non-stop
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
       HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
@@ -227,7 +231,7 @@ uint8_t dummy_byte = 0x00;
       // 2. Set Oversampling (OSR_CONFIG register 0x36)
       // Standard resolution for both Temp and Press (0x02 << 3 | 0x02) -> 0x12
       tx_cfg[0] = 0x36 & 0x7F; // Write mode
-      tx_cfg[1] = 0x12;
+      tx_cfg[1] = 0x52; // b7: reserved, b6: pressure on, b5-3: oversampling rate pressure, b2-0: OSR temp
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
       HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
@@ -236,7 +240,7 @@ uint8_t dummy_byte = 0x00;
       // 3. Switch Power Mode to Normal Mode (ODR_CONFIG register 0x37, bits [1:0] = 0x02)
       // This starts continuous conversions. (10Hz ODR + Normal Mode -> 0x03 | 0x02 = 0x05)
       tx_cfg[0] = 0x37 & 0x7F; // Write mode
-      tx_cfg[1] = 0x05;
+      tx_cfg[1] = 0x5D;
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
       HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
@@ -332,19 +336,25 @@ uint8_t dummy_byte = 0x00;
 
 	      // Reconstruction based on data indexing (rx_data[0]=SPI Status, rx_data[1]=Dummy)
 	      // Temperature: 24-bit signed integer
-	      raw_temperature = (int32_t)((uint32_t)rx_data[4] << 16 |
-	                                  (uint32_t)rx_data[3] << 8  |
-	                                  (uint32_t)rx_data[2]);
+	      raw_temperature = (int32_t)((uint32_t)rx_data[3] << 16 |
+	                                  (uint32_t)rx_data[2] << 8  |
+	                                  (uint32_t)rx_data[1]);
 
 	      // Sign-extend 24-bit to 32-bit if negative
 	      if (raw_temperature & 0x00800000) {
 	          raw_temperature |= 0xFF000000;
 	      }
 
+	      BMP585_temp = raw_temperature / 65536.0f;
+
+
 	      // Pressure: 24-bit unsigned integer
-	      raw_pressure = (uint32_t)((uint32_t)rx_data[7] << 16 |
-	                                (uint32_t)rx_data[6] << 8  |
-	                                (uint32_t)rx_data[5]);
+	      raw_pressure = (uint32_t)((uint32_t)rx_data[6] << 16 |
+	                                (uint32_t)rx_data[5] << 8  |
+	                                (uint32_t)rx_data[4]);
+
+	      BMP585_pressure = raw_pressure / 64;
+
 
 	      HAL_Delay(100); // Sample at roughly 10Hz
   }
