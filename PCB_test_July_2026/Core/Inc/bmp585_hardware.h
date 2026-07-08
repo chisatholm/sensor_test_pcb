@@ -11,8 +11,13 @@
 #include "stm32l4xx_hal.h" // Adjust if you are using a different STM32 series (e.g., L4, G4, etc.)
 #include "bmp5.h"
 
-/* * The Bosch API requires us to declare a central device tracking object.
- * We use 'extern' here so your main.c file can easily see it later.
+
+/* Pin configuration constants based on your schematic assignments */
+#define BMP585_CS_PORT  GPIOA
+#define BMP585_CS_PIN   GPIO_PIN_8
+
+/* * The Bosch API requires one to declare a central device tracking object.
+ * Use 'extern' here so main.c can see it.
  */
 extern struct bmp5_dev bmp585_device;
 

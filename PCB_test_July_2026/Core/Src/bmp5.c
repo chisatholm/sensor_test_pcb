@@ -52,7 +52,7 @@
 
 /*!              Global Variable
  ****************************************************************************/
-
+extern uint16_t debug_x;
 /******************************************************************************/
 
 /*!         Local Function Prototypes
@@ -340,6 +340,7 @@ int8_t bmp5_init(struct bmp5_dev *dev)
 
     /* Check for null pointer in the device structure */
     rslt = null_ptr_check(dev);
+    debug_x = 1;
 
     if (rslt == BMP5_OK)
     {
@@ -352,12 +353,14 @@ int8_t bmp5_init(struct bmp5_dev *dev)
              * SPI communication with the device.
              */
             rslt = bmp5_get_regs(BMP5_REG_CHIP_ID, &reg_data, 1, dev);
+            debug_x = 2;
         }
 
         if (rslt == BMP5_OK)
         {
             /* Read chip_id */
             rslt = bmp5_get_regs(BMP5_REG_CHIP_ID, &chip_id, 1, dev);
+            debug_x = 25;
 
             if (rslt == BMP5_OK)
             {
@@ -365,15 +368,18 @@ int8_t bmp5_init(struct bmp5_dev *dev)
                 {
                     /* Validate NVM readiness */
                     rslt = nvm_ready_check(dev);
+                    debug_x = 3;
                 }
                 else
                 {
                     rslt = BMP5_E_INVALID_CHIP_ID;
+                    debug_x = 4;
                 }
 
                 if (rslt == BMP5_OK)
                 {
                     rslt = validate_chip_id(chip_id, dev);
+                    debug_x = 5;
                 }
             }
         }

@@ -36,7 +36,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+//#define BMP5_REG_CHIP_ID      0x01
+//#define BMP5_REG_INT_STATUS   0x27
+//#define BMP5_REG_STATUS       0x28
+//#define BMP5_REG_CMD          0x7E
 
+#define BMP5_CMD_SOFT_RESET   0xB6
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -67,6 +72,22 @@ float leaf_temperature_celsius = 0.0f;
 float bmp_temperature_c = 0.0f;
 float bmp_pressure_hpa = 0.0f;
 
+volatile uint8_t test_chip_id    = 0;
+volatile uint8_t test_status     = 0;
+volatile uint8_t test_int_status = 0;
+HAL_StatusTypeDef spi_err;
+
+volatile uint32_t raw_pressure = 0;
+volatile int32_t  raw_temperature = 0;
+
+uint8_t tx_data[8] = {0}; // 1 Address byte + 1 Dummy byte + 6 Data bytes
+uint8_t rx_data[8] = {0};
+
+uint16_t debug_x = 0;
+int16_t debug_xi = 0;
+int16_t debug_xii =0;
+
+
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -77,7 +98,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-
+int8_t BMP585_AJC_Init(struct bmp5_dev *dev);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -120,23 +141,134 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  /* --- STEP 1: POWER-UP STABILIZATION --- */
+HAL_Delay(5);
+
+/* --- STEP 2: INTERFACE SELECTION WORKAROUND --- */
+// Force sensor out of I2C mode into 4-wire SPI mode via a dummy CS toggle/write
+uint8_t dummy_byte = 0x00;
+  HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+  HAL_SPI_Transmit(&hspi1, &dummy_byte, 1, HAL_MAX_DELAY);
+  HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+
+  HAL_Delay(5);
+
+  /* --- STEP 3: NATIVE HARDWARE SOFT-RESET --- */
+    // Direct register write to completely refresh the chip from its stuck state
+    uint8_t tx_reset[2];
+    tx_reset[0] = BMP5_REG_CMD & 0x7F; // Clear Bit 7 for Write operations
+    tx_reset[1] = BMP5_CMD_SOFT_RESET;
+
+    HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+    spi_err = HAL_SPI_Transmit(&hspi1, tx_reset, 2, HAL_MAX_DELAY);
+    HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+
+    HAL_Delay(3);
+
+    /* --- STEP 4: READ BACK THE POST-POWER-UP CRITERIA --- */
+      uint8_t tx_buf[3];
+      uint8_t rx_buf[3];
+
+      // =====================================================================
+	  // NEW: POST-RESET DUMMY WAKE-UP READ
+	  // The first transaction after a soft-reset is swallowed by the sensor
+	  // to synchronize the SPI interface. We perform a quick dummy read here.
+	  // =====================================================================
+	  tx_buf[0] = 0x80; // Dummy read address
+	  tx_buf[1] = 0x00;
+	  HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+	  HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, 2, HAL_MAX_DELAY);
+	  HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+
+	  HAL_Delay(1); // Tiny gap to let the sensor serial interface settle
+
+      // 1. Read CHIP_ID (Register 0x01)
+      tx_buf[0] = BMP5_REG_CHIP_ID | 0x80; // Set Bit 7 for Read operations
+      tx_buf[1] = 0x00;                    // Dummy Byte
+      tx_buf[2] = 0x00;
+
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      test_chip_id = rx_buf[1];            // Extract data after dummy byte
+
+      // 2. Read STATUS (Register 0x28)
+      tx_buf[0] = BMP5_REG_STATUS | 0x80;
+      tx_buf[1] = 0x00;
+      tx_buf[2] = 0x00;
+
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      test_status = rx_buf[1];
+
+      // 3. Read INT_STATUS (Register 0x27)
+      tx_buf[0] = BMP5_REG_INT_STATUS | 0x80;
+      tx_buf[1] = 0x00;
+      tx_buf[2] = 0x00;
+
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      test_int_status = rx_buf[1];
+
+      /* --- STEP 5: SENSOR CONFIGURATION --- */
+      uint8_t tx_cfg[2];
+
+      // 1. Enable Pressure & Temperature Channels (ODR_CONFIG register 0x37)
+      // We'll set ODR to 10Hz (0x03) and keep PWR_MODE in standby for now
+      tx_cfg[0] = 0x37 & 0x7F; // Write mode
+      tx_cfg[1] = 0x03;
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      HAL_Delay(1);
+
+      // 2. Set Oversampling (OSR_CONFIG register 0x36)
+      // Standard resolution for both Temp and Press (0x02 << 3 | 0x02) -> 0x12
+      tx_cfg[0] = 0x36 & 0x7F; // Write mode
+      tx_cfg[1] = 0x12;
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      HAL_Delay(1);
+
+      // 3. Switch Power Mode to Normal Mode (ODR_CONFIG register 0x37, bits [1:0] = 0x02)
+      // This starts continuous conversions. (10Hz ODR + Normal Mode -> 0x03 | 0x02 = 0x05)
+      tx_cfg[0] = 0x37 & 0x7F; // Write mode
+      tx_cfg[1] = 0x05;
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+      HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
+      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+      HAL_Delay(10); // Let the first conversion cycle finish
+
+
+
+  if (0){
   if (MLX_Application_Init() != 0)
     {
         Error_Handler();
     }
     HAL_Delay(100);
+  }
 
+  if (0){
+	  if (BMP585_Hardware_Init() == BMP5_OK)
+		  {
+			  // Initialization succeeded! The sensor is now configuring and sampling in NORMAL mode.
+		  }
+		  else
+		  {
+			 HAL_Delay(10);
+			  debug_xi = BMP585_Hardware_Init();
+			  // Initialization failed. Execution will lock here so you can catch it with a debugger.
+			  while(1);
+		  }
+	}
   /* USER CODE END 2 */
 
-  if (BMP585_Hardware_Init() == BMP5_OK)
-	  {
-		  // Initialization succeeded! The sensor is now configuring and sampling in NORMAL mode.
-	  }
-	  else
-	  {
-		  // Initialization failed. Execution will lock here so you can catch it with a debugger.
-		  while(1);
-	  }
+
+
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
@@ -189,10 +321,32 @@ int main(void)
 	HAL_Delay(5);
 */
 
-	int8_t rslt;
-	rslt = BMP585_Get_Data(&bmp_temperature_c, &bmp_pressure_hpa);
-	HAL_Delay(250);
+	  // Start burst read at TEMP_XLSB (Register 0x1D)
+	      // This will stream out: TEMP_XLSB, TEMP_LSB, TEMP_MSB, PRESS_XLSB, PRESS_LSB, PRESS_MSB
+	      tx_data[0] = 0x1D | 0x80; // Read mode
 
+	      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_RESET);
+	      // Transmit address/dummy and clock out all 6 data bytes in one single CS window
+	      HAL_SPI_TransmitReceive(&hspi1, tx_data, rx_data, 8, HAL_MAX_DELAY);
+	      HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
+
+	      // Reconstruction based on data indexing (rx_data[0]=SPI Status, rx_data[1]=Dummy)
+	      // Temperature: 24-bit signed integer
+	      raw_temperature = (int32_t)((uint32_t)rx_data[4] << 16 |
+	                                  (uint32_t)rx_data[3] << 8  |
+	                                  (uint32_t)rx_data[2]);
+
+	      // Sign-extend 24-bit to 32-bit if negative
+	      if (raw_temperature & 0x00800000) {
+	          raw_temperature |= 0xFF000000;
+	      }
+
+	      // Pressure: 24-bit unsigned integer
+	      raw_pressure = (uint32_t)((uint32_t)rx_data[7] << 16 |
+	                                (uint32_t)rx_data[6] << 8  |
+	                                (uint32_t)rx_data[5]);
+
+	      HAL_Delay(100); // Sample at roughly 10Hz
   }
   /* USER CODE END 3 */
 }
@@ -495,6 +649,38 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+int8_t BMP585_AJC_Init(struct bmp5_dev *dev)
+{
+	struct bmp5_dev BMP585;
+	BMP585.chip_id = 0x51;
+	BMP585.delay_us;
+	BMP585.read;
+	BMP585.write;
+	BMP585.intf_rslt;
+	BMP585.intf;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 /* USER CODE END 4 */
 

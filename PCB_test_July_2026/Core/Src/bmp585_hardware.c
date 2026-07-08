@@ -9,12 +9,11 @@
 /* Reference the auto-generated hardware handle from main.c */
 extern SPI_HandleTypeDef hspi1;
 
-/* Pin configuration constants based on your schematic assignments */
-#define BMP585_CS_PORT  GPIOA
-#define BMP585_CS_PIN   GPIO_PIN_8
+
 
 /* Allocate the global device structure tracking context required by the Bosch API */
 struct bmp5_dev bmp585_device;
+extern int16_t debug_xii;
 
 /*
  * Private Helper Functions for Software Chip Select Control
@@ -50,7 +49,7 @@ BMP5_INTF_RET_TYPE bmp5_spi_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t l
     uint8_t rx_buf[32] = { 0 };
 
     // Safety check to ensure we don't overrun our local stack arrays
-    if ((len + 2) > 32) {
+    if ((len + 1) > 32) {
         return BMP5_E_COM_FAIL;
     }
 
@@ -64,7 +63,7 @@ BMP5_INTF_RET_TYPE bmp5_spi_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t l
     BMP585_CS_Select();
 
     // Clock out everything simultaneously in one continuous hardware transaction frame
-    status = HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, (uint16_t)(len + 2), HAL_MAX_DELAY);
+    status = HAL_SPI_TransmitReceive(&hspi1, tx_buf, rx_buf, (uint16_t)(len + 1), HAL_MAX_DELAY);
 
     // Release CS back high now that the entire operation is physically complete
     BMP585_CS_Deselect();
@@ -74,7 +73,7 @@ BMP5_INTF_RET_TYPE bmp5_spi_read(uint8_t reg_addr, uint8_t *reg_data, uint32_t l
         // rx_buf[0] and rx_buf[1] contain the trash data captured during the address/dummy clocks.
         // The real register payload bytes start precisely at index 2.
         for (uint32_t i = 0; i < len; i++) {
-            reg_data[i] = rx_buf[i + 2];
+            reg_data[i] = rx_buf[i + 1];
         }
     }
 
@@ -134,13 +133,14 @@ int8_t BMP585_Hardware_Init(void)
     struct bmp5_osr_odr_press_config osr_odr_press_cfg = {0};
 
     /* === WORKAROUND: Force BMP585 out of I2C mode into 4-Wire SPI Mode === */
+    HAL_Delay(10);
     uint8_t dummy_wake = 0x00;
     BMP585_CS_Select();
     HAL_SPI_Transmit(&hspi1, &dummy_wake, 1, HAL_MAX_DELAY);
     BMP585_CS_Deselect();
 
     // Give the chip's internal digital multiplexer a brief moment to toggle states
-    HAL_Delay(2);
+    HAL_Delay(20);
     /* ===================================================================== */
 
     /* 1. Map physical hardware contexts to the Bosch device structure model */
@@ -154,6 +154,7 @@ int8_t BMP585_Hardware_Init(void)
      * automatically validates the CHIP_ID (0x50) to authenticate SPI health. */
     rslt = bmp5_init(&bmp585_device);
     if (rslt != BMP5_OK) {
+    	debug_xii = 1;
         return rslt;
     }
 
@@ -165,12 +166,14 @@ int8_t BMP585_Hardware_Init(void)
 
     rslt = bmp5_set_osr_odr_press_config(&osr_odr_press_cfg, &bmp585_device);
     if (rslt != BMP5_OK) {
+    	debug_xii = 2;
         return rslt;
     }
 
     /* 4. Switch from STANDBY to NORMAL mode to begin ongoing sampling cycles */
     rslt = bmp5_set_power_mode(BMP5_POWERMODE_NORMAL, &bmp585_device);
 
+    debug_xii = 3;
     return rslt;
 }
 
