@@ -25,6 +25,7 @@
 #include "sht45.h"
 #include "mlx.h"
 #include "bmp585_hardware.h"
+#include "fs4001e.h"
 
 
 /* USER CODE END Includes */
@@ -77,11 +78,14 @@ volatile uint8_t test_status     = 0;
 volatile uint8_t test_int_status = 0;
 HAL_StatusTypeDef spi_err;
 
+
 volatile uint32_t raw_pressure = 0;
 volatile int32_t  raw_temperature = 0;
 
 volatile float BMP585_temp = 0;
 volatile float BMP585_pressure = 0;
+
+volatile float MFM_flow = 123.4;
 
 
 uint8_t tx_data[8] = {0}; // 1 Address byte + 1 Dummy byte + 6 Data bytes
@@ -102,7 +106,7 @@ static void MX_I2C1_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_USART2_UART_Init(void);
 /* USER CODE BEGIN PFP */
-int8_t BMP585_AJC_Init(struct bmp5_dev *dev);
+//int8_t BMP585_AJC_Init(struct bmp5_dev *dev);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -145,6 +149,23 @@ int main(void)
   MX_USART2_UART_Init();
   /* USER CODE BEGIN 2 */
 
+  // API based BMP585 initialisation sequence
+  int8_t init_status = BMP585_Hardware_Init(&bmp585_device);
+
+  if(0){
+  if (init_status == BMP5_OK)
+  {
+      test_chip_id = bmp585_device.chip_id; // Catches 0x51
+  }
+  else
+  {
+      test_chip_id = 0xEE;
+      while(1); // Trap for debugging
+  }
+  }
+
+  // hand-made code to initialise BMP585
+  if (0){
   /* --- STEP 1: POWER-UP STABILIZATION --- */
 HAL_Delay(5);
 
@@ -245,7 +266,7 @@ uint8_t dummy_byte = 0x00;
       HAL_SPI_Transmit(&hspi1, tx_cfg, 2, HAL_MAX_DELAY);
       HAL_GPIO_WritePin(BMP585_CS_PORT, BMP585_CS_PIN, GPIO_PIN_SET);
       HAL_Delay(10); // Let the first conversion cycle finish
-
+  }
 
 
   if (0){
@@ -256,19 +277,7 @@ uint8_t dummy_byte = 0x00;
     HAL_Delay(100);
   }
 
-  if (0){
-	  if (BMP585_Hardware_Init() == BMP5_OK)
-		  {
-			  // Initialization succeeded! The sensor is now configuring and sampling in NORMAL mode.
-		  }
-		  else
-		  {
-			 HAL_Delay(10);
-			  debug_xi = BMP585_Hardware_Init();
-			  // Initialization failed. Execution will lock here so you can catch it with a debugger.
-			  while(1);
-		  }
-	}
+
   /* USER CODE END 2 */
 
 
@@ -324,7 +333,7 @@ uint8_t dummy_byte = 0x00;
 
 	HAL_Delay(5);
 */
-
+if(0){
 	  // Start burst read at TEMP_XLSB (Register 0x1D)
 	      // This will stream out: TEMP_XLSB, TEMP_LSB, TEMP_MSB, PRESS_XLSB, PRESS_LSB, PRESS_MSB
 	      tx_data[0] = 0x1D | 0x80; // Read mode
@@ -356,11 +365,21 @@ uint8_t dummy_byte = 0x00;
 	      BMP585_pressure = raw_pressure / 64;
 
 
-	      HAL_Delay(100); // Sample at roughly 10Hz
+	      HAL_Delay(100); // Sample at roughly 10Hz}
+
+
   }
+
+	if(1){
+
+	    	  FS4001E_Life_Sign(&hi2c1);
+	    	  HAL_Delay(1);
+	    	  MFM_flow = FS4001E_Flow_Read(&hi2c1);
+	    	  HAL_Delay(30);
+	      }
   /* USER CODE END 3 */
 }
-
+}
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -659,38 +678,6 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-int8_t BMP585_AJC_Init(struct bmp5_dev *dev)
-{
-	struct bmp5_dev BMP585;
-	BMP585.chip_id = 0x51;
-	BMP585.delay_us;
-	BMP585.read;
-	BMP585.write;
-	BMP585.intf_rslt;
-	BMP585.intf;
-}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 /* USER CODE END 4 */
 
@@ -708,6 +695,7 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
+
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number

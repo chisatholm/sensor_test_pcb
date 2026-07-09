@@ -10,6 +10,7 @@
 
 #include "stm32l4xx_hal.h" // Adjust if you are using a different STM32 series (e.g., L4, G4, etc.)
 #include "bmp5.h"
+#include "bmp5_defs.h"
 
 
 /* Pin configuration constants based on your schematic assignments */
@@ -31,7 +32,7 @@ void bmp5_delay_us(uint32_t period, void *intf_ptr);
 /*
  * High-Level Application Control Functions
  */
-int8_t BMP585_Hardware_Init(void);
+int8_t BMP585_Hardware_Init(struct bmp5_dev *dev);
 int8_t BMP585_Get_Data(float *temperature_c, float *pressure_hpa);
 
 #endif /* BMP585_HARDWARE_H_ */
