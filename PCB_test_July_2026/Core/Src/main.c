@@ -91,9 +91,13 @@ volatile float MFM_flow = 123.4;
 uint8_t tx_data[8] = {0}; // 1 Address byte + 1 Dummy byte + 6 Data bytes
 uint8_t rx_data[8] = {0};
 
+uint8_t my_serial_number[13];
+
 uint16_t debug_x = 0;
 int16_t debug_xi = 0;
 int16_t debug_xii =0;
+
+char MFM_serial_number[11] = {0};
 
 
 /* USER CODE END PV */
@@ -128,7 +132,7 @@ int main(void)
   /* MCU Configuration--------------------------------------------------------*/
 
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  HAL_Init();
 
   /* USER CODE BEGIN Init */
 
@@ -280,9 +284,6 @@ uint8_t dummy_byte = 0x00;
 
   /* USER CODE END 2 */
 
-
-
-
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
@@ -372,14 +373,23 @@ if(0){
 
 	if(1){
 
-	    	  FS4001E_Life_Sign(&hi2c1);
-	    	  HAL_Delay(1);
-	    	  MFM_flow = FS4001E_Flow_Read(&hi2c1);
-	    	  HAL_Delay(30);
+
+
+	    	  //FS4001E_Life_Sign(&hi2c1, my_serial_number);
+			  //FS4001E_Test_Raw_Read(&hi2c1);
+			  //FS4001E_Read_Serial_First_Bytes(&hi2c1);
+			  FS4001E_Read_SN(&hi2c1, MFM_serial_number);
+			  HAL_Delay(10);
+			  MFM_flow = FS4001E_Get_Flow_Rate(&hi2c1);
+
+
+	    	  //MFM_flow = FS4001E_Flow_Read(&hi2c1);
+	    	  HAL_Delay(300);
 	      }
+  }
   /* USER CODE END 3 */
 }
-}
+
 /**
   * @brief System Clock Configuration
   * @retval None
@@ -695,7 +705,6 @@ void Error_Handler(void)
   }
   /* USER CODE END Error_Handler_Debug */
 }
-
 #ifdef USE_FULL_ASSERT
 /**
   * @brief  Reports the name of the source file and the source line number
